@@ -693,7 +693,7 @@ def create_user():
         return send_404("failed to create user")
 
 
-@app.route("/test_route")
+@app.route("/")
 def test_route():
     return send_200("server up")
 
