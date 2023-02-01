@@ -16,7 +16,7 @@ from collections import deque
 from send_verification_email import send_verification_email
 from twoFA import generate_twoFA_code, compare_twoFA_code
 from utils import pil_img_to_io, send_200, send_404, remove_files, reset_lp, directory_to_dict, file_to_dict
-from fc import compare_face_data
+# from fc import compare_face_data
 
 dev_mode = False
 
@@ -73,7 +73,7 @@ class LoginProcess(db.Model):
 
 
 class Directory(db.Model):
-    id = db.Column(db.Integer, primary_key=True, auto_increment=True)
+    id = db.Column(db.Integer, primary_key=True)
     parent_id = db.Column(db.Integer)
     name = db.Column(db.String(100), nullable=False)
     username = db.Column(db.String(100), nullable=False)
@@ -81,7 +81,7 @@ class Directory(db.Model):
 
 
 class File(db.Model):
-    id = db.Column(db.Integer, primary_key=True, auto_increment=True)
+    id = db.Column(db.Integer, primary_key=True)
     directory_id = db.Column(db.Integer, nullable=False)
     username = db.Column(db.String(100), nullable=False)
     date_created = db.Column(db.DateTime, default=datetime.utcnow)
@@ -101,8 +101,8 @@ def validate_lp(username, window_id):
     if (
         (datetime.utcnow() - lp.date_created).total_seconds() > 6000 or
         window_id != lp.window_id or
-        not lp.twoFA_verified or
-        not lp.fc_verified
+        not lp.twoFA_verified #or
+        # not lp.fc_verified
     ):
         reset_lp(lp, window_id)
         return False
@@ -394,57 +394,57 @@ def twoFA_login():
         return send_404("failed to compare twoFA code")
 
 
-@app.route("/fc_login", methods=["GET", "POST"])
-def fc_login():
-    try:
-        request_json = json.loads(request.data)
-        request_data = request_json["data"]
-    except:
-        return send_404("could not decode request data")
-    username = request_data.get("username", None)
-    picture_data_uri = request_data.get("pictureData", None)
-    window_id = request_data.get("windowId", None)
-    if not (username and picture_data_uri and window_id):
-        return send_404("no credentials found")
-    lp = LoginProcess.query.get(username)
-    if not lp:
-        return send_404("no lp found")
-    if (datetime.utcnow() - lp.date_created).total_seconds() > 600:
-        reset_lp(lp, window_id)
-        db.session.commit()
-        return send_404("login session expired")
-    if lp.fc_verified:
-        return send_200("fc already verifyed")
-    try:
-        input_filename = f"./fc_images/{username}_input.png"
-        reference_filename = f"./fc_images/{username}_reference.png"
-        _, encoded = picture_data_uri.split(",", 1)
-        input_data = b64decode(encoded)
-        with open(input_filename, "wb") as f:
-            f.write(input_data)
-        res = s3_client.get_object(
-            Bucket=config("AWS_BUCKET_NAME"),
-            Key=f"{username}_reference.png",
-        )
+# @app.route("/fc_login", methods=["GET", "POST"])
+# def fc_login():
+#     try:
+#         request_json = json.loads(request.data)
+#         request_data = request_json["data"]
+#     except:
+#         return send_404("could not decode request data")
+#     username = request_data.get("username", None)
+#     picture_data_uri = request_data.get("pictureData", None)
+#     window_id = request_data.get("windowId", None)
+#     if not (username and picture_data_uri and window_id):
+#         return send_404("no credentials found")
+#     lp = LoginProcess.query.get(username)
+#     if not lp:
+#         return send_404("no lp found")
+#     if (datetime.utcnow() - lp.date_created).total_seconds() > 600:
+#         reset_lp(lp, window_id)
+#         db.session.commit()
+#         return send_404("login session expired")
+#     if lp.fc_verified:
+#         return send_200("fc already verifyed")
+#     try:
+#         input_filename = f"./fc_images/{username}_input.png"
+#         reference_filename = f"./fc_images/{username}_reference.png"
+#         _, encoded = picture_data_uri.split(",", 1)
+#         input_data = b64decode(encoded)
+#         with open(input_filename, "wb") as f:
+#             f.write(input_data)
+#         res = s3_client.get_object(
+#             Bucket=config("AWS_BUCKET_NAME"),
+#             Key=f"{username}_reference.png",
+#         )
 
-        reference_data = res.get("Body", None)
-        if not reference_data:
-            return send_404("could not download reference")
-        with open(reference_filename, "wb") as f:
-            f.write(reference_data.read())
+#         reference_data = res.get("Body", None)
+#         if not reference_data:
+#             return send_404("could not download reference")
+#         with open(reference_filename, "wb") as f:
+#             f.write(reference_data.read())
 
-        if compare_face_data(input_filename, reference_filename):
-            lp.fc_verified = True
-            db.session.commit()
-            remove_files([input_filename, reference_filename])
-            return send_200("fc verified")
-        else:
-            remove_files([input_filename, reference_filename])
-            return send_404("invalid fc")
-    except Exception as e:
-        print(e)
-        remove_files([input_filename, reference_filename])
-        return send_404("failed to verify fc")
+#         if compare_face_data(input_filename, reference_filename):
+#             lp.fc_verified = True
+#             db.session.commit()
+#             remove_files([input_filename, reference_filename])
+#             return send_200("fc verified")
+#         else:
+#             remove_files([input_filename, reference_filename])
+#             return send_404("invalid fc")
+#     except Exception as e:
+#         print(e)
+#         remove_files([input_filename, reference_filename])
+#         return send_404("failed to verify fc")
 
 
 @app.route("/validate_username")
@@ -563,84 +563,84 @@ def validate_twoFA_code():
         return send_404("failed to compare twoFA code")
 
 
-@app.route("/face_recognition_setup", methods=["GET", "POST"])
-def face_recognition_setup():
-    try:
-        request_json = json.loads(request.data)
-        request_data = request_json["data"]
-    except:
-        return send_404("could not decode request data")
-    username = request_data.get("username", None)
-    picture_data_uri = request_data.get("pictureData", None)
-    if not username or not picture_data_uri:
-        return send_404("no credentials found")
-    user = User.query.get(username)
-    if user:
-        return send_404("user already exists")
-    try:
-        _, encoded = picture_data_uri.split(",", 1)
-        picture_data = b64decode(encoded)
-        # with open("yee.png", "wb") as f:
-        #     f.write(picture_data)
-        picture_data = BytesIO(picture_data)
-        picture_data.seek(0)
-        s3_client.put_object(
-            Bucket=config("AWS_BUCKET_NAME"),
-            Key=f"{username}_reference.png",
-            Body=picture_data
-        )
-        fc = FaceRecognition(username=username)
-        db.session.add(fc)
-        db.session.commit()
-        return send_200("picture uploaded")
-    except:
-        return send_404("failed to upload picture")
+# @app.route("/face_recognition_setup", methods=["GET", "POST"])
+# def face_recognition_setup():
+#     try:
+#         request_json = json.loads(request.data)
+#         request_data = request_json["data"]
+#     except:
+#         return send_404("could not decode request data")
+#     username = request_data.get("username", None)
+#     picture_data_uri = request_data.get("pictureData", None)
+#     if not username or not picture_data_uri:
+#         return send_404("no credentials found")
+#     user = User.query.get(username)
+#     if user:
+#         return send_404("user already exists")
+#     try:
+#         _, encoded = picture_data_uri.split(",", 1)
+#         picture_data = b64decode(encoded)
+#         # with open("yee.png", "wb") as f:
+#         #     f.write(picture_data)
+#         picture_data = BytesIO(picture_data)
+#         picture_data.seek(0)
+#         s3_client.put_object(
+#             Bucket=config("AWS_BUCKET_NAME"),
+#             Key=f"{username}_reference.png",
+#             Body=picture_data
+#         )
+#         fc = FaceRecognition(username=username)
+#         db.session.add(fc)
+#         db.session.commit()
+#         return send_200("picture uploaded")
+#     except:
+#         return send_404("failed to upload picture")
 
 
-@app.route("/validate_face_recognition", methods=["GET", "POST"])
-def validate_face_recognition():
-    try:
-        request_json = json.loads(request.data)
-        request_data = request_json["data"]
-    except:
-        return send_404("could not decode request data")
-    username = request_data.get("username", None)
-    picture_data_uri = request_data.get("pictureData", None)
-    if not username or not picture_data_uri:
-        return send_404("no credentials found")
-    try:
-        input_filename = f"./fc_images/{username}_input.png"
-        reference_filename = f"./fc_images/{username}_reference.png"
-        _, encoded = picture_data_uri.split(",", 1)
-        input_data = b64decode(encoded)
-        with open(input_filename, "wb") as f:
-            f.write(input_data)
-        res = s3_client.get_object(
-            Bucket=config("AWS_BUCKET_NAME"),
-            Key=f"{username}_reference.png",
-        )
+# @app.route("/validate_face_recognition", methods=["GET", "POST"])
+# def validate_face_recognition():
+#     try:
+#         request_json = json.loads(request.data)
+#         request_data = request_json["data"]
+#     except:
+#         return send_404("could not decode request data")
+#     username = request_data.get("username", None)
+#     picture_data_uri = request_data.get("pictureData", None)
+#     if not username or not picture_data_uri:
+#         return send_404("no credentials found")
+#     try:
+#         input_filename = f"./fc_images/{username}_input.png"
+#         reference_filename = f"./fc_images/{username}_reference.png"
+#         _, encoded = picture_data_uri.split(",", 1)
+#         input_data = b64decode(encoded)
+#         with open(input_filename, "wb") as f:
+#             f.write(input_data)
+#         res = s3_client.get_object(
+#             Bucket=config("AWS_BUCKET_NAME"),
+#             Key=f"{username}_reference.png",
+#         )
 
-        reference_data = res.get("Body", None)
-        if not reference_data:
-            return send_404("could not download reference")
-        with open(reference_filename, "wb") as f:
-            f.write(reference_data.read())
+#         reference_data = res.get("Body", None)
+#         if not reference_data:
+#             return send_404("could not download reference")
+#         with open(reference_filename, "wb") as f:
+#             f.write(reference_data.read())
 
-        if compare_face_data(input_filename, reference_filename):
-            fc = FaceRecognition.query.get(username)
-            if not fc:
-                raise Exception("no fc found")
-            fc.verified = True
-            db.session.commit()
-            remove_files([input_filename, reference_filename])
-            return send_200("input matches reference")
-        else:
-            remove_files([input_filename, reference_filename])
-            return send_404("input does not match reference")
-    except Exception as e:
-        print(e)
-        remove_files([input_filename, reference_filename])
-        return send_404("failed to compare input and reference")
+#         if compare_face_data(input_filename, reference_filename):
+#             fc = FaceRecognition.query.get(username)
+#             if not fc:
+#                 raise Exception("no fc found")
+#             fc.verified = True
+#             db.session.commit()
+#             remove_files([input_filename, reference_filename])
+#             return send_200("input matches reference")
+#         else:
+#             remove_files([input_filename, reference_filename])
+#             return send_404("input does not match reference")
+#     except Exception as e:
+#         print(e)
+#         remove_files([input_filename, reference_filename])
+#         return send_404("failed to compare input and reference")
 
 
 @app.route("/create_user")
@@ -661,11 +661,11 @@ def create_user():
         return send_404("no twoFA found")
     if not twoFA.verified:
         return send_404("twoFA not verified")
-    fc = FaceRecognition.query.filter_by(username=username).one()
-    if not fc:
-        return send_404("no fc found")
-    if not fc.verified:
-        return send_404("fc not verified")
+    # fc = FaceRecognition.query.filter_by(username=username).one()
+    # if not fc:
+    #     return send_404("no fc found")
+    # if not fc.verified:
+    #     return send_404("fc not verified")
     user = User.query.filter_by(username=username).all()
     if user:
         return send_404("user already created")
@@ -699,4 +699,5 @@ def test_route():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # port = int(os.environ.get('PORT', 5000))
+    app.run(debug=True, port=5000)

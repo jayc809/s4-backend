@@ -33,7 +33,7 @@ def remove_files(files):
 def reset_lp(lp, window_id):
     lp.window_id = window_id
     lp.twoFA_verified = False
-    lp.fc_verified = False
+    # lp.fc_verified = False
     lp.date_created = datetime.utcnow()
 
 
